@@ -70,6 +70,7 @@ class Ledger:
             ):
         self.connection.rollback()   # clear any transaction left open by an earlier SELECT
         with self.connection.begin():
+            self.connection.execute(text('LOCK TABLE balances IN ACCESS EXCLUSIVE MODE;'))
             sql = text('INSERT INTO transactions (debit_account_id, credit_account_id, amount) VALUES (:d, :c, :a);')
             sql = sql.bindparams(d=debit_account_id, c=credit_account_id, a=amount)
             logging.debug(sql)
