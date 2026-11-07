@@ -64,7 +64,7 @@ class Ledger:
             logging.debug(sql)
             self.connection.execute(sql)
 
-    def transfer_funds(
+    def _transfer_funds_once(
             self,
             debit_account_id,
             credit_account_id,
@@ -89,7 +89,7 @@ class Ledger:
             This can result in SQL injection vulnerabilities.
         '''
         with self.connection.begin():
-            self.connection.execute(text('LOCK TABLE balances IN ACCESS EXCLUSIVE MODE;'))
+            # self.connection.execute(text('LOCK TABLE balances IN ACCESS EXCLUSIVE MODE;'))
 
             # Insert the transaction
             sql = text(f'INSERT INTO transactions (debit_account_id, credit_account_id, amount) VALUES ({debit_account_id}, {credit_account_id}, {amount});')
@@ -97,7 +97,7 @@ class Ledger:
             self.connection.execute(sql)
 
             # Update the debit account balance
-            sql = text(f'SELECT balance FROM balances WHERE account_id = {debit_account_id};')
+            sql = text(f'SELECT balance FROM balances WHERE account_id = {debit_account_id} FOR UPDATE;')
             logging.debug(sql)
             results = self.connection.execute(sql)
             debit_account_balance = results.first()[0]
@@ -109,7 +109,7 @@ class Ledger:
             self.connection.execute(sql)
 
             # Update the credit account balance
-            sql = text(f'SELECT balance FROM balances WHERE account_id = {credit_account_id};')
+            sql = text(f'SELECT balance FROM balances WHERE account_id = {credit_account_id} FOR UPDATE;')
             logging.debug(sql)
             results = self.connection.execute(sql)
             credit_account_balance = results.first()[0]
@@ -120,3 +120,11 @@ class Ledger:
             logging.debug(sql)
             self.connection.execute(sql)
 
+
+    def transfer_funds(self, debit_account_id, credit_account_id, amount):
+        while True:
+            try:
+                self._transfer_funds_once(debit_account_id, credit_account_id, amount)
+                return
+            except sqlalchemy.exc.OperationalError as e:
+                logging.warning(f'deadlock detected, retrying: {e}')
